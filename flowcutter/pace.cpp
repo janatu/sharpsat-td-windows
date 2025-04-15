@@ -22,16 +22,47 @@
 #include <string>
 #include <sstream>
 #include <queue>
+#include <iostream>
 
+#if defined(_MSC_VER) || defined(__MINGW32__)
+#include <time.h>
+#ifndef STDOUT_FILENO 
+#define STDOUT_FILENO 1 
+#endif
+#include <Windows.h>
+#include <stdint.h> // portable: uint64_t   MSVC: __int64 
+
+inline int gettimeofday(struct timeval* tp, struct timezone* tzp)
+{
+	// Note: some broken versions only have 8 trailing zero's, the correct epoch has 9 trailing zero's
+	// This magic number is the number of 100 nanosecond intervals since January 1, 1601 (UTC)
+	// until 00:00:00 January 1, 1970 
+	static const uint64_t EPOCH = ((uint64_t)116444736000000000ULL);
+
+	SYSTEMTIME  system_time;
+	FILETIME    file_time;
+	uint64_t    time;
+
+	GetSystemTime(&system_time);
+	SystemTimeToFileTime(&system_time, &file_time);
+	time = ((uint64_t)file_time.dwLowDateTime);
+	time += ((uint64_t)file_time.dwHighDateTime) << 32;
+
+	tp->tv_sec = (long)((time - EPOCH) / 10000000L);
+	tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
+	return 0;
+}
+#else
 #include <sys/time.h>
 #include <unistd.h>
+#endif
 
 #include <iostream>
 using namespace std;
 
 ArrayIDIDFunc tail, head;
 const char*volatile best_decomposition = 0;
-int best_bag_size = numeric_limits<int>::max();
+int best_bag_size = 100000000;
 
 void ignore_return_value(long long){}
 
@@ -55,7 +86,7 @@ S& access_internal_vector(std::priority_queue<T, S, C>& q) {
 
 void print_comment(std::string msg){
 	msg = "c "+std::move(msg) + "\n";
-	ignore_return_value(write(STDOUT_FILENO, msg.data(), msg.length()));
+	std::cout << msg;
 }
 
 template<class Tail, class Head>
@@ -122,7 +153,7 @@ void compute_multilevel_partition(const Tail&tail, const Head&head, const Comput
 	int max_open_bag_size = node_count;
 
 	auto check_if_better = [&]{
-		int current_tree_width = std::max(max_closed_bag_size, max_open_bag_size);
+		int current_tree_width = max(max_closed_bag_size, max_open_bag_size);
 
 		if(current_tree_width < smallest_known_treewidth){
 			smallest_known_treewidth = current_tree_width;
@@ -325,9 +356,9 @@ void signal_handler(int)
 {
 	const char*x = best_decomposition;
 	if(x != 0)
-		ignore_return_value(write(STDOUT_FILENO, x, strlen(x)));
+		std::cout << x;
 	else
-		ignore_return_value(write(STDOUT_FILENO, no_decomposition_message, sizeof(no_decomposition_message)));
+		std::cout << no_decomposition_message;
 
 	_Exit(EXIT_SUCCESS);
 }
@@ -371,7 +402,7 @@ void test_new_order(const ArrayIDIDFunc&order){
 			delete[]old_decomposition;
 			{
 				string msg = "c status "+to_string(best_bag_size)+" "+to_string(get_milli_time())+"\n";
-				ignore_return_value(write(STDOUT_FILENO, msg.data(), msg.length()));
+				std::cout<< msg;
 			}
 		}
 	}

@@ -9,6 +9,19 @@
 #include <cassert>
 #include <functional>
 
+
+#ifdef _MSC_VER
+#include <intrin.h>
+#define __builtin_popcountll __popcnt64
+#define __builtin_ctzll __ctzll
+
+inline unsigned long long __ctzll(unsigned long long val) {
+    unsigned long pos;
+    unsigned char is_nonzero = _BitScanReverse64(&pos, val);
+    return pos;
+}
+#endif
+
 #define BITS 64
 
 namespace sspp {

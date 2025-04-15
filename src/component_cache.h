@@ -365,7 +365,9 @@ inline uint64_t freeram() {
 }
 
 #else
-
+inline uint64_t freeram() {
+    return 0;
+}
 #endif
 
 
@@ -390,7 +392,6 @@ void ComponentCache<T_num>::init(Component &super_comp, const Hasher& hasher) {
 
   free_entry_base_slots_.clear();
   free_entry_base_slots_.reserve(10000);
-
   uint64_t free_ram = freeram();
   uint64_t max_cache_bound = 95 * (free_ram / 100);
 

@@ -14,8 +14,17 @@
 
 #include <string>
 
+
+#if defined(_MSC_VER) || defined(__MINGW32__)
+#include <time.h>
+#else
 #include <sys/time.h>
 #include <sys/resource.h>
+
+// #include <unistd.h>
+#endif
+
+
 #include <gmpxx.h>
 #include <limits>
 #include "mpfr/mpreal.h"

@@ -4,6 +4,7 @@
 #include "permutation.h"
 #include "heap.h"
 #include <vector>
+#include <iterator>
 
 ArrayIDFunc<std::vector<int>> build_dyn_array(const ArrayIDIDFunc&tail, const ArrayIDIDFunc&head){
 	const int node_count = tail.image_count();

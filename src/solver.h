@@ -18,7 +18,38 @@
 
 #include "solver_config.h"
 
+#if defined(_MSC_VER) || defined(__MINGW32__)
+#include <time.h>
+
+#include <Windows.h>
+#include <stdint.h> // portable: uint64_t   MSVC: __int64 
+
+inline int gettimeofday(struct timeval* tp, struct timezone* tzp)
+{
+	// Note: some broken versions only have 8 trailing zero's, the correct epoch has 9 trailing zero's
+	// This magic number is the number of 100 nanosecond intervals since January 1, 1601 (UTC)
+	// until 00:00:00 January 1, 1970 
+	static const uint64_t EPOCH = ((uint64_t)116444736000000000ULL);
+
+	SYSTEMTIME  system_time;
+	FILETIME    file_time;
+	uint64_t    time;
+
+	GetSystemTime(&system_time);
+	SystemTimeToFileTime(&system_time, &file_time);
+	time = ((uint64_t)file_time.dwLowDateTime);
+	time += ((uint64_t)file_time.dwHighDateTime) << 32;
+
+	tp->tv_sec = (long)((time - EPOCH) / 10000000L);
+	tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
+	return 0;
+}
+#else
 #include <sys/time.h>
+#endif
+
+
+
 
 #include <deque>
 
@@ -46,12 +77,12 @@ public:
   }
 
   double getElapsedSeconds() {
-    timeval r = getElapsedTime();
+	struct timeval r = getElapsedTime();
     return r.tv_sec + (double) r.tv_usec / 1000000;
   }
 
   bool interval_tick() {
-    timeval actual_time;
+    struct timeval actual_time;
     gettimeofday(&actual_time, NULL);
     if (actual_time.tv_sec - last_interval_start_.tv_sec
         > interval_length_.tv_sec) {
@@ -837,8 +868,7 @@ void Solver<T_num>::recordLastUIPCauses() {
 // variables of lower dl: if seen we dont work with them anymore
 // variables of this dl: if seen we incorporate their
 // antecedent and set to unseen
-	bool seen[Instance<T_num>::num_variables() + 1];
-	memset(seen, false, sizeof(bool) * (Instance<T_num>::num_variables() + 1));
+	bool* seen = new bool[Instance<T_num>::num_variables() + 1];
 
 	static vector<LiteralID> tmp_clause;
 	tmp_clause.clear();
@@ -921,7 +951,7 @@ void Solver<T_num>::recordLastUIPCauses() {
 //     << var(curr_lit).decision_level << ", " << stack_.get_decision_level() << endl;
 //	cout << "V"  << var(curr_lit).ante.isAnt() << " "  << endl;
 	minimizeAndStoreUIPClause(curr_lit.neg(), tmp_clause, seen);
-
+	delete seen;
 //	if (var(curr_lit).decision_level > assertion_level_)
 //		assertion_level_ = var(curr_lit).decision_level;
 }

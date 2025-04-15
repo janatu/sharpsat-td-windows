@@ -16,7 +16,7 @@ set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS)
 set(BUILD_SHARED_LIBS OFF)
 endif(STATIC)
 
-set(CMAKE_CXX_FLAGS "-std=c++11 -O3 -Wall -Wextra -Wshadow -Wfatal-errors -Wno-sign-compare -Wno-literal-suffix")
+set(CMAKE_CXX_FLAGS "-std=c++11 -O3 -Wall ")
 
 SET(CMAKE_C_FLAGS "-std=c99 -Wall -msse4.1 -mpclmul")
 
@@ -26,6 +26,8 @@ find_library(MPFR_LIB mpfr)
 
 add_definitions(-DMPFR_USE_NO_MACRO)
 add_subdirectory(flowcutter)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/flowcutter /usr/local/include /src/vcpkg/installed/x64-windows/include)
 
 SET(SOURCES 
 	src/preprocessor/graph.cpp 
