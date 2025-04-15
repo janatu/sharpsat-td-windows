@@ -9,75 +9,15 @@
 #include <queue>
 #include <algorithm>
 #include <sstream>
+#include <thread>
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#if defined(_MSC_VER) || defined(__MINGW32__)
-#include <fcntl.h>
-#define pipe(fds) _pipe(fds,1024, _O_BINARY)
-
-
-size_t getline(char** lineptr, size_t* n, FILE* stream) {
-	char* bufptr = NULL;
-	char* p = bufptr;
-	size_t size;
-	int c;
-
-	if (lineptr == NULL) {
-		return -1;
-	}
-	if (stream == NULL) {
-		return -1;
-	}
-	if (n == NULL) {
-		return -1;
-	}
-	bufptr = *lineptr;
-	size = *n;
-
-	c = fgetc(stream);
-	if (c == EOF) {
-		return -1;
-	}
-	if (bufptr == NULL) {
-		bufptr = (char*)malloc(128);
-		if (bufptr == NULL) {
-			return -1;
-		}
-		size = 128;
-	}
-	p = bufptr;
-	while (c != EOF) {
-		if ((p - bufptr) > (size - 1)) {
-			size = size + 128;
-			bufptr = (char*)realloc(bufptr, size);
-			if (bufptr == NULL) {
-				return -1;
-			}
-		}
-		*p++ = c;
-		if (c == '\n') {
-			break;
-		}
-		c = fgetc(stream);
-	}
-
-	*p++ = '\0';
-	*lineptr = bufptr;
-	*n = size;
-
-	return p - bufptr - 1;
-}
-#else
-#include <sys/wait.h>
-#include <unistd.h>
-#endif
-
 #include <signal.h>
 
-
-#include <thread>
+#include <boost/process.hpp>
+#include <boost/asio.hpp>
 
 #include "utils.hpp"
 
@@ -108,92 +48,43 @@ TreeDecomposition Treedecomp(const Graph& graph, double time) {
 	assert(n >= 2);
 	auto es = graph.Edges();
 	int m = es.size();
-	// pipes:
-    // parent to child is 0,1
-    // child to parent is 2,3
-    // i.e. if pipefds_1 == [0,1,2,3] then
-    //     parent         child1 
-    //        1 -----------> 0
-    //        2 <----------- 3
-    int pipefds[4];
-	int ret = pipe(pipefds);
-	if(ret == -1) {
-		throw std::runtime_error("pipe() failed.");
-	}
-	ret = pipe(pipefds + 2);
-	if(ret == -1) {
-		throw std::runtime_error("pipe() failed.");
-	}
-    pid_t pid = 0;
-	pid = fork();
-	switch(pid) {
-		case -1:
-			throw std::runtime_error("fork() failed.");
-		case 0:
-			// child
-			// duplicate
-			ret = dup2(pipefds[0], STDIN_FILENO);
-			if(ret == -1) {
-				throw std::runtime_error("dup2() failed.");
-			}
-			ret = dup2(pipefds[3], STDOUT_FILENO);
-			if(ret == -1) {
-				throw std::runtime_error("dup2() failed.");
-			}
-			// close pipes
-			close(pipefds[0]);
-			close(pipefds[1]);
-			close(pipefds[2]);
-			close(pipefds[3]);
-			break;
-		default:
-			// parent
-			// close pipes
-			close(pipefds[0]);
-			close(pipefds[3]);
-	}
-    if(pid == 0) { // we are in the recursive case
-		string cmd = "./flow_cutter_pace17";
-        execlp(cmd.c_str(), cmd.c_str(), NULL);
-    } else { 
+	boost::asio::io_context ctx;
+	boost::asio::readable_pipe in{ctx};
+	boost::asio::writable_pipe out{ctx};
+	boost::process::process flow_cutter(ctx.get_executor(), "./flow_cutter_pace17", {}, boost::process::process_stdio{out, in, {}});
+  
         // we need to give input to the child
 		auto start = std::chrono::system_clock::now();
-        FILE *file = fdopen(pipefds[1], "w");
-		fprintf(file, "p tw %d %d\n", n, m);
+		boost::asio::write(out, boost::asio::buffer("p tw " + std::to_string(n) + " " + std::to_string(m) + "\n"));
 		for (auto e : es) {
-			fprintf(file, "%d %d\n", e.F+1, e.S+1);
+			boost::asio::write(out, boost::asio::buffer(std::to_string(e.F+1) + " " + std::to_string(e.S+1) + "\n"));
 		}
-		fflush(file);
-        fclose(file); 
-		cout<<"c o Primal edges "<<es.size()<<endl;
-		file = fdopen(pipefds[2], "r");
-        size_t read = 0;
-		size_t len = 0;
-		char * line = NULL;
-		bool found_first = false;
-		int claim_width = 0;
-		while (!found_first) {
-			read = getline(&line, &len, file);
-			if(read == -1) {
-				throw std::runtime_error("getline() failed.");
+		out.close();
+		std::cout << "c o Primal edges "<< m << std::endl;
+
+		std::string line;
+		boost::system::error_code ec;
+		do {
+			boost::asio::read(in, boost::asio::dynamic_buffer(line), ec);
+			std::cout << line << std::endl;
+			if(!ec) {
+				throw std::runtime_error("reading from pipe failed");
 			}
-			assert(read > 0);
-			found_first = strncmp("c status", line, 8) == 0;
-		}
+			if(line.rfind("c status", 0) == 0) {
+				break;
+			}
+		} while(flow_cutter.running());
 		auto passed = std::chrono::system_clock::now() - start;
 		auto remaining = std::chrono::duration<double>(time) - passed;
 		std::this_thread::sleep_for(remaining);
-		kill(pid,SIGTERM); 
-		string tmp;
+		flow_cutter.interrupt();
+		std::string tmp;
+		int claim_width = 0;
 		TreeDecomposition dec(0, 0);
-		while (true) {
-			read = getline(&line, &len, file);
-			if(read == -1) {
-				if(errno != 0) {
-					throw std::runtime_error("getline() failed.");
-				} else {
-					break;
-				}
+		while (ec != boost::asio::error::eof) {
+			boost::asio::read(in, boost::asio::dynamic_buffer(line), ec);
+			if(!ec && ec != boost::asio::error::eof) {
+				throw std::runtime_error("reading from pipe failed");
 			}
 			std::stringstream ss(line);
 			ss>>tmp;
@@ -222,20 +113,13 @@ TreeDecomposition Treedecomp(const Graph& graph, double time) {
 				dec.AddEdge(a, b);
 			}
 		}
-		fclose(file);
-		free(line);
-		int status = 0;
-		ret = waitpid(pid, &status, 0);
-		if(ret == -1) {
-			throw std::runtime_error("waitpid() failed.");
-		}
+		in.close();
+		auto status = flow_cutter.wait();
 		assert(status >= 0);
-		assert(WIFEXITED(status));
 		assert(dec.Width() <= claim_width);
 		cout << "c o width " << dec.Width() << endl;
 		assert(dec.Verify(graph));
 		return dec;
 	}
-}
 } // namespace decomp
 } // namespace sspp

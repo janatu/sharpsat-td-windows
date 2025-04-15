@@ -951,7 +951,7 @@ void Solver<T_num>::recordLastUIPCauses() {
 //     << var(curr_lit).decision_level << ", " << stack_.get_decision_level() << endl;
 //	cout << "V"  << var(curr_lit).ante.isAnt() << " "  << endl;
 	minimizeAndStoreUIPClause(curr_lit.neg(), tmp_clause, seen);
-	delete seen;
+	delete [] seen;
 //	if (var(curr_lit).decision_level > assertion_level_)
 //		assertion_level_ = var(curr_lit).decision_level;
 }
