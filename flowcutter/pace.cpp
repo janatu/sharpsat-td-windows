@@ -401,8 +401,8 @@ void test_new_order(const ArrayIDIDFunc&order){
 			best_decomposition = compute_decomposition_given_order(order);
 			delete[]old_decomposition;
 			{
-				string msg = "c status "+to_string(best_bag_size)+" "+to_string(get_milli_time())+"\n";
-				std::cout<< msg;
+				string msg = "c status "+to_string(best_bag_size)+" "+to_string(get_milli_time());
+				std::cout<< msg << std::endl;
 			}
 		}
 	}
