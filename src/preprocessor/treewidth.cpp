@@ -61,14 +61,16 @@ TreeDecomposition Treedecomp(const Graph& graph, double time) {
 	}
 	out.close();
 	std::cout << "c o Primal edges "<< m << std::endl;
-
 	std::string line;
+	std::size_t read = 0;
 	do {
-		boost::asio::read_until(in, boost::asio::dynamic_buffer(line), '\n');
+		read = boost::asio::read_until(in, boost::asio::dynamic_buffer(line), '\n');
 		if(line.find("c status", 0) != 0) {
 			break;
 		}
+		line = line.substr(read);
 	} while(flow_cutter.running());
+	line = line.substr(read);
 	auto passed = std::chrono::system_clock::now() - start;
 	auto remaining = std::chrono::duration<double>(time) - passed;
 	std::this_thread::sleep_for(remaining);
@@ -78,13 +80,17 @@ TreeDecomposition Treedecomp(const Graph& graph, double time) {
 	TreeDecomposition dec(0, 0);
 	boost::system::error_code ec;
 	while (ec != boost::asio::error::eof) {
-		line.clear();
-		boost::asio::read_until(in, boost::asio::dynamic_buffer(line), '\n');
-		std::cout << line << std::endl;
-		std::stringstream ss(line);
+		try {
+			read = boost::asio::read_until(in, boost::asio::dynamic_buffer(line), '\n');
+		} catch(boost::system::system_error const&) {
+			break;
+		}
+		std::string actual = line.substr(0, line.find('\n'));
+		std::stringstream ss(actual);
 		ss>>tmp;
-		if (tmp == "c") continue;
-		if (tmp == "s") {
+		if (tmp == "c") {
+		  // not the same as continue!
+		} else if (tmp == "s") {
 			ss>>tmp;
 			assert(tmp == "td");
 			int bs,nn;
@@ -107,6 +113,7 @@ TreeDecomposition Treedecomp(const Graph& graph, double time) {
 			ss>>b;
 			dec.AddEdge(a, b);
 		}
+		line = line.substr(read);
 	}
 	in.close();
 	auto status = flow_cutter.wait();

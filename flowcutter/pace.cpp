@@ -356,7 +356,7 @@ void signal_handler(int)
 {
 	const char*x = best_decomposition;
 	if(x != 0)
-		std::cout << x;
+		std::cout << x << std::flush;
 	else
 		std::cout << no_decomposition_message;
 
